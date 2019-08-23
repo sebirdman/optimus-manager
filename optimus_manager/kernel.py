@@ -1,7 +1,7 @@
 import optimus_manager.checks as checks
 import optimus_manager.pci as pci
 from optimus_manager.bash import exec_bash, BashError
-
+import time
 
 class KernelSetupError(Exception):
     pass
@@ -70,6 +70,9 @@ def _power_switch_off(config):
     elif config["optimus"]["switching"] == "nouveau":
         _load_nouveau(config)
 
+    if config["optimus"]["switching"] == "self":
+        _disable_PCI()
+
     else:
         print("Power switching backend is disabled.")
 
@@ -95,6 +98,9 @@ def _power_switch_on(config):
 
     elif config["optimus"]["switching"] == "nouveau":
         pass
+
+    if config["optimus"]["switching"] == "self":
+        _enable_PCI()
 
     else:
         print("Power switching backend is disabled.")
@@ -156,6 +162,26 @@ def _unload_nouveau(config):
         raise KernelSetupError("Cannot unload nouveau : %s" % str(e))
 
 
+def _load_nvidia(config):
+
+    modeset_value = {"yes": 1, "no": 0}[config["intel"]["modeset"]]
+
+    print("Loading nouveau module")
+
+    try:
+        exec_bash("modprobe nouveau modeset=%d" % modeset_value)
+    except BashError as e:
+        raise KernelSetupError("Cannot load nouveau : %s" % str(e))
+
+
+def _unload_nvidia(config):
+
+    try:
+        exec_bash("modprobe -r nouveau")
+    except BashError as e:
+        raise KernelSetupError("Cannot unload nouveau : %s" % str(e))
+
+
 def _set_PCI_power_mode(requested_gpu_state):
 
     assert requested_gpu_state in ["OFF", "ON"]
@@ -164,3 +190,15 @@ def _set_PCI_power_mode(requested_gpu_state):
         pci.set_power_management((requested_gpu_state == "OFF"))
     except pci.PCIError as e:
         print("WARNING : Cannot set PCI power management : %s" % str(e))
+
+def _remove_PCI():
+    try:
+        pci.disable_card()
+    except pci.PCIError as e:
+        print("WARNING : Cannot remove PCI : %s" % str(e))
+
+def _enable_PCI():
+    try:
+        pci.enable_card()
+    except pci.PCIError as e:
+        print("WARNING : Cannot enable PCI : %s" % str(e))

@@ -17,6 +17,11 @@ def set_power_management(enabled):
     else:
         _set_mode("on")
 
+def disable_card():
+    _remove()
+
+def enable_card():
+    _turn_on_card()
 
 def get_bus_ids(notation_fix=True):
 
@@ -66,16 +71,41 @@ def get_bus_ids(notation_fix=True):
 
     return bus_ids
 
-
-def _set_mode(mode):
-
-    bus_ids = get_bus_ids(notation_fix=False)
-    pci_path = "/sys/bus/pci/devices/0000:%s/power/control" % bus_ids["nvidia"]
-
+def _write_to_pci(pci_path, contents):
     try:
         with open(pci_path, "w") as f:
-            f.write(mode)
+            f.write(contents)
     except FileNotFoundError:
         raise PCIError("Cannot find Nvidia PCI path at %s" % pci_path)
     except IOError:
         raise PCIError("Error writing to %s" % pci_path)
+
+def _set_mode(mode):
+    bus_ids = get_bus_ids(notation_fix=False)
+    pci_path = "/sys/bus/pci/devices/0000:%s/power/control" % bus_ids["nvidia"]
+    _write_to_pci(pci_path, mode)
+
+def _turn_on_card():
+
+    _set_PCI_power_mode("ON")
+
+    time.sleep(1)
+
+    card_online = False
+    try:
+        ## See if the bus_id already exists
+        bus_ids = get_bus_ids(notation_fix=False)
+        card_online = True
+    except PCIError:
+        print("Card is already on, skipping PCI rescan.")
+    
+    if not card_online:
+        _write_to_pci("/sys/bus/pci/rescan", "1")
+
+    _set_PCI_power_mode("ON")
+
+def _remove():
+
+    bus_ids = get_bus_ids(notation_fix=False)
+    pci_path = "/sys/bus/pci/devices/0000:%s/remove" % bus_ids["nvidia"]
+    _write_to_pci(pci_path, "1")
